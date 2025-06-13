@@ -1,148 +1,123 @@
 <?php
+// 1. INISIALISASI & KEAMANAN
+// =============================
 session_start();
-include 'db.php';
+include '../db.php'; // Pastikan path ini benar
 
-// Logika ini tetap sama, untuk mengarahkan pengguna yang sudah login
-if (isset($_SESSION['user_id'])) {
-    if ($_SESSION['role'] === 'admin') {
-        header("Location: admin/dashboard.php");
-        exit;
-    } else {
-        header("Location: user/index.php");
-        exit;
-    }
+// Cek apakah user sudah login dan memiliki role 'user'
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'user') {
+    // Jika tidak, alihkan ke halaman login dan hentikan eksekusi skrip
+    header("Location: ../index.php");
+    exit;
 }
+
+
+// 2. PENGAMBILAN DATA
+// =====================
+$user_id = $_SESSION['user_id'];
+$username = $_SESSION['username'];
+$saldo = 0; // Default saldo jika tidak ditemukan
+
+// Ambil saldo terkini dari database
+// Menggunakan prepared statement untuk keamanan
+$query_saldo = $conn->prepare("SELECT saldo FROM users WHERE id = ?");
+$query_saldo->bind_param("i", $user_id);
+$query_saldo->execute();
+$result_saldo = $query_saldo->get_result();
+if ($result_saldo->num_rows > 0) {
+    $saldo = $result_saldo->fetch_assoc()['saldo'];
+}
+$query_saldo->close();
+
+
+// Ambil 5 riwayat transaksi terakhir
+$query_transaksi = $conn->prepare("SELECT deskripsi, jumlah, tipe, tanggal FROM transaksi WHERE user_id = ? ORDER BY tanggal DESC LIMIT 5");
+$query_transaksi->bind_param("i", $user_id);
+$query_transaksi->execute();
+$riwayat_transaksi = $query_transaksi->get_result();
+
 ?>
 <!DOCTYPE html>
-<html lang="id" class="scroll-smooth">
+<html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Dompetku - Dompet Digital Modern Anda</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Dompetku</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap'); 
         body {
-            font-family: 'Poppins', sans-serif;
+            font-family: 'Inter', sans-serif;
         }
     </style>
 </head>
-<body class="bg-gray-50">
+<body class="bg-gray-100 min-h-screen flex flex-col">
 
-    <div class="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-purple-600 to-blue-500 -z-10"></div>
-    
-    <div class="flex flex-col min-h-screen">
-    
-        <div class="container mx-auto px-4 sm:px-6">
-            <header class="flex justify-between items-center py-5 sm:py-6">
-                <h1 class="text-2xl md:text-3xl font-bold text-white">Dompetku<span class="text-blue-300">.</span></h1>
-                <div class="space-x-2 flex items-center">
-                    <button onclick="showModal('loginModal')" class="bg-white/20 text-white px-4 py-2 rounded-full font-semibold hover:bg-white/30 backdrop-blur-sm text-sm sm:px-5">
-                        Login
-                    </button>
-                    <button onclick="showModal('registerModal')" class="bg-white text-purple-700 p-2 sm:px-5 sm:py-2 rounded-full font-semibold shadow-lg hover:bg-gray-100 flex items-center text-sm">
-                        <i class="fas fa-user-plus text-base sm:hidden"></i>
-                        <span class="hidden sm:inline">Daftar Sekarang</span>
-                    </button>
-                </div>
-            </header>
+    <header class="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
+        <h1 class="text-2xl font-bold text-purple-700">Dompetku<span class="text-blue-300">.</span></h1>
+        <div class="flex items-center text-sm">
+            <a href="../logout.php" class="ml-4 text-red-500 hover:text-red-700 font-semibold">Logout</a>
+        </div>
+    </header>
 
-            <main class="flex-grow flex items-center py-12 sm:py-16 md:py-20 lg:py-24">
-                <div class="grid md:grid-cols-2 gap-8 md:gap-12 items-center">
-                    <div class="text-white text-center md:text-left">
-                        <h2 class="text-4xl sm:text-5xl md:text-5xl lg:text-6xl xl:text-7xl font-extrabold mb-4 leading-tight">
-                            Transaksi Cepat & Aman di Ujung Jari.
-                        </h2>
-                        <p class="text-base sm:text-lg text-white/80 mb-8 max-w-lg mx-auto md:mx-0">
-                            Kelola keuangan Anda dengan mudah. Top up, simpan, dan kirim uang ke mana saja, kapan saja, dengan Dompetku.
-                        </p>
-                        <button onclick="showModal('registerModal')" class="bg-white text-purple-600 px-6 py-3 sm:px-8 rounded-full font-bold shadow-2xl hover:bg-gray-200">
-                            Mulai Sekarang <i class="fas fa-arrow-right ml-2"></i>
-                        </button>
-                    </div>
-                    <div class="mt-8 md:mt-0">
-                        <img src="https://cdn-icons-png.flaticon.com/512/2920/2920319.png" alt="Dompet Ilustrasi" class="w-full max-w-[18rem] sm:max-w-sm md:max-w-md lg:max-w-lg mx-auto drop-shadow-2xl">
-                    </div>
-                </div>
-            </main>
+    <main class="flex-grow container mx-auto px-6 py-8">
+        
+        <h2 class="text-3xl font-bold text-gray-800 mb-6">
+            <span>
+                Hai, <span class="font-semibold"><?= htmlspecialchars($username) ?>👋</span>
+            </span>
+        </h2>
+
+        <div class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-8 rounded-2xl shadow-lg mb-8">
+            <h3 class="text-lg font-medium opacity-80">Saldo Aktif</h3>
+            <p class="text-5xl font-bold mt-2">Rp <?= number_format($saldo, 0, ',', '.') ?></p>
         </div>
 
-    </div> <div id="loginModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-20 p-4">
-        <form action="login.php" method="POST" class="bg-white text-gray-800 p-8 rounded-2xl shadow-2xl w-full max-w-sm relative">
-            <button type="button" onclick="closeAllModals()" class="absolute top-4 right-4 text-gray-400 hover:text-red-500 text-2xl">&times;</button>
-            <h3 class="text-2xl font-bold text-center mb-2">Selamat Datang Kembali</h3>
-            <p class="text-center text-gray-500 mb-6">Login untuk melanjutkan.</p>
-            
-            <?php if(isset($_GET['error'])): ?>
-            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative mb-4 text-sm" role="alert">
-                <span class="block sm:inline"><?= htmlspecialchars($_GET['error']) ?></span>
-            </div>
-            <?php endif; ?>
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+            <a href="topup.php" class="bg-white p-6 rounded-xl shadow-md hover:shadow-xl hover:scale-105 transition-all duration-300">
+                <h3 class="text-xl font-bold text-purple-600 mb-2">Top Up Saldo</h3>
+                <p class="text-gray-600">Isi saldo dompet Anda secara instan.</p>
+            </a>
+            <a href="transaksi.php" class="bg-white p-6 rounded-xl shadow-md hover:shadow-xl hover:scale-105 transition-all duration-300">
+                <h3 class="text-xl font-bold text-purple-600 mb-2">Riwayat Lengkap</h3>
+                <p class="text-gray-600">Lihat semua catatan transaksi Anda.</p>
+            </a>
+            <a href="profil.php" class="bg-white p-6 rounded-xl shadow-md hover:shadow-xl hover:scale-105 transition-all duration-300">
+                <h3 class="text-xl font-bold text-purple-600 mb-2">Profil & Pengaturan</h3>
+                <p class="text-gray-600">Kelola data dan keamanan akun Anda.</p>
+            </a>
+        </div>
 
+        <div class="mt-10 bg-white p-6 rounded-xl shadow-md">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Aktivitas Terbaru</h3>
             <div class="space-y-4">
-                <input type="text" name="username" placeholder="Username" required class="w-full border-gray-300 border p-3 rounded-lg focus:ring-2 focus:ring-purple-500">
-                <input type="password" name="password" placeholder="Password" required class="w-full border-gray-300 border p-3 rounded-lg focus:ring-2 focus:ring-purple-500">
+                <?php if ($riwayat_transaksi->num_rows > 0): ?>
+                    <?php while($row = $riwayat_transaksi->fetch_assoc()): ?>
+                        <div class="flex justify-between items-center border-b border-gray-200 pb-3 last:border-b-0">
+                            <div>
+                                <p class="font-semibold text-gray-700"><?= htmlspecialchars($row['deskripsi']) ?></p>
+                                <p class="text-sm text-gray-500"><?= date('d F Y, H:i', strtotime($row['tanggal'])) ?></p>
+                            </div>
+                            <p class="font-bold text-lg <?= $row['tipe'] == 'pemasukan' ? 'text-green-500' : 'text-red-500' ?>">
+                                <?= $row['tipe'] == 'pemasukan' ? '+' : '-' ?>Rp<?= number_format($row['jumlah'], 0, ',', '.') ?>
+                            </p>
+                        </div>
+                    <?php endwhile; ?>
+                <?php else: ?>
+                    <p class="text-gray-500 text-center py-4">Belum ada aktivitas transaksi.</p>
+                <?php endif; ?>
             </div>
-            <button type="submit" class="bg-purple-600 w-full text-white py-3 rounded-lg mt-6 font-semibold hover:bg-purple-700">Masuk</button>
-            <p class="text-center text-sm text-gray-500 mt-4">
-                Belum punya akun? <button type="button" onclick="switchModal('loginModal', 'registerModal')" class="font-semibold text-purple-600 hover:underline">Daftar</button>
-            </p>
-        </form>
-    </div>
+        </div>
+    </main>
 
-    <div id="registerModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-20 p-4">
-        <form action="register.php" method="POST" class="bg-white text-gray-800 p-8 rounded-2xl shadow-2xl w-full max-w-sm relative">
-            <button type="button" onclick="closeAllModals()" class="absolute top-4 right-4 text-gray-400 hover:text-red-500 text-2xl">&times;</button>
-            <h3 class="text-2xl font-bold text-center mb-2">Buat Akun Baru</h3>
-            <p class="text-center text-gray-500 mb-6">Pendaftaran cepat, hanya butuh semenit.</p>
-            <div class="space-y-4">
-                <input type="text" name="username" placeholder="Pilih Username" required class="w-full border-gray-300 border p-3 rounded-lg focus:ring-2 focus:ring-blue-500">
-                <input type="password" name="password" placeholder="Buat Password" required class="w-full border-gray-300 border p-3 rounded-lg focus:ring-2 focus:ring-blue-500">
-            </div>
-            <button type="submit" class="bg-blue-600 w-full text-white py-3 rounded-lg mt-6 font-semibold hover:bg-blue-700">Daftar</button>
-            <p class="text-center text-sm text-gray-500 mt-4">
-                Sudah punya akun? <button type="button" onclick="switchModal('registerModal', 'loginModal')" class="font-semibold text-blue-600 hover:underline">Login</button>
-            </p>
-        </form>
-    </div>
+    <footer class="text-center py-5 mt-8 text-sm text-gray-500">
+        &copy; <?= date('Y') ?> Dompetkur — All rights reserved.
+    </footer>
 
-    <script>
-        const loginModal = document.getElementById('loginModal');
-        const registerModal = document.getElementById('registerModal');
-
-        function showModal(modalId) {
-            document.getElementById(modalId).classList.remove('hidden');
-        }
-
-        function closeAllModals() {
-            loginModal.classList.add('hidden');
-            registerModal.classList.add('hidden');
-        }
-
-        function switchModal(fromId, toId) {
-            document.getElementById(fromId).classList.add('hidden');
-            document.getElementById(toId).classList.remove('hidden');
-        }
-
-        loginModal.addEventListener('click', function(event) {
-            if (event.target === loginModal) {
-                closeAllModals();
-            }
-        });
-        registerModal.addEventListener('click', function(event) {
-             if (event.target === registerModal) {
-                closeAllModals();
-            }
-        });
-
-        <?php if(isset($_GET['error'])): ?>
-            showModal('loginModal');
-        <?php endif; ?>
-    </script>
 </body>
 </html>
+<?php
+// Menutup koneksi database setelah semua proses selesai
+$riwayat_transaksi->close();
+$conn->close();
+?>
